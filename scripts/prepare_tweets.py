@@ -4,87 +4,92 @@ import os
 import subprocess
 from collections import defaultdict
 
-# Chemin vers le fichier JSON des tweets
-input_file = "tweets_with_locations.json"
-
-# Créer un répertoire temporaire pour stocker les fichiers organisés par mois
-os.makedirs("tweets_by_month", exist_ok=True)
-
-# Dictionnaire pour stocker les tweets par année/mois
-tweets_by_month = defaultdict(list)
-
-# Lire le fichier JSON
-print("Lecture du fichier de tweets...")
-with open(input_file, 'r', encoding='utf-8') as file:
-    try:
-        # Essayer de charger le fichier comme une liste de tweets
-        tweets = json.load(file)
-        is_list = True
-    except json.JSONDecodeError:
-        # Si échec, essayer de lire ligne par ligne (format JSONL)
-        file.seek(0)
-        tweets = []
-        for line in file:
-            try:
-                tweet = json.loads(line.strip())
-                tweets.append(tweet)
-            except json.JSONDecodeError:
-                continue
-        is_list = True
-
-print(f"Nombre de tweets chargés: {len(tweets)}")
-
-# Organiser les tweets par mois et année
-print("Organisation des tweets par mois...")
-for tweet in tweets:
-    # Vérifier la structure du tweet pour trouver la date
-    created_at = None
+def load_tweets(file_path="data/tweets_with_locations.json"):
+    """Charge les tweets depuis un fichier JSON ou JSONL."""
+    print("Lecture du fichier de tweets...")
+    with open(file_path, 'r', encoding='utf-8') as file:
+        try:
+            tweets = json.load(file)
+        except json.JSONDecodeError:
+            # Fallback pour format JSONL
+            file.seek(0)
+            tweets = [json.loads(line.strip()) for line in file if line.strip()]
     
-    # Format des tweets dans notre dataset: "timestamp": "2024-04-03 10:24:53"
-    if "timestamp" in tweet:
+    print(f"Nombre de tweets chargés: {len(tweets)}")
+    return tweets
+
+def organize_tweets_by_month(tweets):
+    """Organise les tweets par année/mois."""
+    print("Organisation des tweets par mois...")
+    tweets_by_month = defaultdict(list)
+    
+    for tweet in tweets:
+        if "timestamp" not in tweet:
+            continue
+            
         try:
             created_at = datetime.datetime.strptime(tweet["timestamp"], "%Y-%m-%d %H:%M:%S")
+            year_month = f"{created_at.year}/{created_at.month:02d}"
+            tweets_by_month[year_month].append(tweet)
         except Exception as e:
             print(f"Erreur de parsing de date: {e}")
-            continue
     
-    if created_at:
-        year_month = f"{created_at.year}/{created_at.month:02d}"
-        tweets_by_month[year_month].append(tweet)
+    return tweets_by_month
 
-# Écrire les tweets dans des fichiers organisés par mois
-print("Écriture des tweets dans des fichiers par mois...")
-for year_month, month_tweets in tweets_by_month.items():
-    year, month = year_month.split('/')
-    directory = f"tweets_by_month/{year}/{month}"
-    os.makedirs(directory, exist_ok=True)
+def write_tweets_to_local_files(tweets_by_month):
+    """Écrit les tweets dans des fichiers locaux organisés par mois."""
+    print("Écriture des tweets dans des fichiers par mois...")
+    os.makedirs("tweets_by_month", exist_ok=True)
     
-    with open(f"{directory}/tweets.json", 'w', encoding='utf-8') as file:
-        json.dump(month_tweets, file, ensure_ascii=False, indent=2)
-    
-    print(f"Écrit {len(month_tweets)} tweets pour {year_month}")
+    for year_month, month_tweets in tweets_by_month.items():
+        year, month = year_month.split('/')
+        directory = f"tweets_by_month/{year}/{month}"
+        os.makedirs(directory, exist_ok=True)
+        
+        with open(f"{directory}/tweets.json", 'w', encoding='utf-8') as file:
+            json.dump(month_tweets, file, ensure_ascii=False, indent=2)
+        
+        print(f"Écrit {len(month_tweets)} tweets pour {year_month}")
 
-# Créer le répertoire /tweets dans HDFS
-print("Création du répertoire /tweets dans HDFS...")
-subprocess.run(["docker", "exec", "namenode", "hdfs", "dfs", "-mkdir", "-p", "/tweets"])
+def upload_tweets_to_hdfs(tweets_by_month):
+    """Upload les fichiers de tweets dans HDFS."""
+    print("Création du répertoire /tweets dans HDFS...")
+    subprocess.run(["docker", "exec", "namenode", "hdfs", "dfs", "-mkdir", "-p", "/tweets"])
+    
+    print("Copie des tweets vers HDFS...")
+    for year_month in tweets_by_month.keys():
+        year, month = year_month.split('/')
+        
+        # Créer la structure de dossiers dans HDFS
+        subprocess.run(["docker", "exec", "namenode", "hdfs", "dfs", "-mkdir", "-p", f"/tweets/{year}/{month}"])
+        
+        # Chemin des fichiers
+        local_path = f"tweets_by_month/{year}/{month}/tweets.json"
+        
+        # Utiliser la méthode directe pour transférer vers HDFS
+        with open(local_path, 'rb') as f:
+            hdfs_path = f"/tweets/{year}/{month}/tweets.json"
+            cmd = ["docker", "exec", "-i", "namenode", "hdfs", "dfs", "-put", "-f", "-", hdfs_path]
+            subprocess.run(cmd, input=f.read())
+        
+        print(f"Tweets pour {year_month} copiés vers HDFS")
 
-# Copier les fichiers vers HDFS
-print("Copie des tweets vers HDFS...")
-for year_month in tweets_by_month.keys():
-    year, month = year_month.split('/')
+def main():
+    """Fonction principale pour préparer les tweets pour HDFS."""
+    # Charger les tweets
+    tweets = load_tweets("data/tweets_with_locations.json")
     
-    # Créer la structure de dossiers dans HDFS
-    subprocess.run(["docker", "exec", "namenode", "hdfs", "dfs", "-mkdir", "-p", f"/tweets/{year}/{month}"])
+    # Organiser par mois
+    tweets_by_month = organize_tweets_by_month(tweets)
     
-    # Copier le fichier local vers le conteneur namenode
-    local_path = f"tweets_by_month/{year}/{month}/tweets.json"
-    container_path = f"/tmp/{year}_{month}_tweets.json"
-    subprocess.run(["docker", "cp", local_path, f"namenode:{container_path}"])
+    # Écrire dans des fichiers locaux
+    write_tweets_to_local_files(tweets_by_month)
     
-    # Déplacer le fichier du conteneur namenode vers HDFS
-    subprocess.run(["docker", "exec", "namenode", "hdfs", "dfs", "-put", container_path, f"/tweets/{year}/{month}/"])
+    # Uploader vers HDFS
+    upload_tweets_to_hdfs(tweets_by_month)
     
-    print(f"Tweets pour {year_month} copiés vers HDFS")
+    print("Préparation des données terminée !")
+    print("Vous pouvez maintenant vérifier la structure sur l'interface HDFS: http://localhost:9870")
 
-print("Préparation des données terminée !")
-print("Vous pouvez maintenant vérifier la structure sur l'interface HDFS: http://localhost:9870")
+if __name__ == "__main__":
+    main()

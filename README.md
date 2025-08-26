@@ -48,3 +48,38 @@ Ce projet implémente une analyse de tweets en utilisant Hadoop et le paradigme 
 1. **Analyse des tendances de hashtags** : Identifie les 10 hashtags les plus populaires par mois.
 2. **Analyse de sentiments** : Calcule le score moyen de sentiment pour chaque jour et par région.
 3. **Distribution géographique** : Analyse la répartition des tweets par pays/région et les différences thématiques par région.
+
+## Commandes HDFS utiles
+
+### Explorer la structure HDFS
+```powershell
+# Lister le contenu d'un répertoire HDFS
+docker exec namenode hdfs dfs -ls -R /
+
+# Lister spécifiquement le dossier des tweets
+docker exec namenode hdfs dfs -ls -R /tweets
+
+# Afficher le contenu d'un fichier HDFS
+docker exec namenode hdfs dfs -cat /tweets/2024/04/tweets.json | Select-Object -First 5
+```
+
+### Gérer les données dans HDFS
+```powershell
+# Créer un répertoire dans HDFS
+docker exec namenode hdfs dfs -mkdir -p /results/hashtags
+
+# Copier un fichier local vers HDFS
+Get-Content hashtag_results.txt -Raw | docker exec -i namenode hdfs dfs -put -f - /results/hashtags/hashtags.txt
+
+# Télécharger un fichier depuis HDFS
+docker exec namenode hdfs dfs -get /tweets/2024/04/tweets.json ./downloaded_tweets.json
+
+# Supprimer un fichier ou répertoire
+docker exec namenode hdfs dfs -rm -r /results/old_data
+```
+
+### Stocker les résultats d'analyse dans HDFS
+```powershell
+# Stocker les résultats d'analyse dans HDFS (utiliser le script fourni)
+powershell -ExecutionPolicy Bypass -File scripts/store_results_in_hdfs.ps1
+```

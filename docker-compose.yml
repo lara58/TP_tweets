@@ -1,4 +1,4 @@
-docker-compose up -dversion: "3"
+version: "3"
 
 services:
   namenode:

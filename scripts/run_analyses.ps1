@@ -1,38 +1,53 @@
 # Script PowerShell pour exécuter les analyses MapReduce dans Hadoop
 
-# Installer Python et TextBlob pour l'analyse de sentiment
-Write-Host "Installation des dépendances..."
-docker exec namenode apt-get update
-docker exec namenode apt-get install -y python3 python3-pip
-docker exec namenode pip3 install textblob
-docker exec namenode python3 -m textblob.download_corpora
+function Setup-Environment {
+    # Installation des dépendances
+    Write-Host "Installation des dépendances..."
+    docker exec namenode apt-get update -qq
+    docker exec namenode apt-get install -y python3 python3-pip -qq
+    docker exec namenode pip3 install textblob -q
+    docker exec namenode python3 -m textblob.download_corpora lite
+    
+    # Copie des scripts MapReduce
+    Write-Host "Configuration des scripts d'analyse..."
+    $scripts = @(
+        "mapreduce/hashtag_mapper.py:/hashtag_mapper.py",
+        "mapreduce/hashtag_reducer.py:/hashtag_reducer.py", 
+        "mapreduce/geo_sentiment_mapper.py:/geo_sentiment_mapper.py",
+        "mapreduce/geo_sentiment_reducer.py:/geo_sentiment_reducer.py"
+    )
+    
+    foreach ($script in $scripts) {
+        $parts = $script -split ":"
+        docker cp $parts[0] namenode:$parts[1]
+        docker exec namenode chmod +x $parts[1]
+    }
+}
 
-# Copier les scripts dans le conteneur namenode
-Write-Host "Copie des scripts dans le conteneur namenode..."
-docker cp hashtag_analyzer.py namenode:/hashtag_analyzer.py
-docker cp sentiment_analyzer.py namenode:/sentiment_analyzer.py
-docker cp geo_analyzer.py namenode:/geo_analyzer.py
+function Run-MapReduce($name, $mapper, $reducer, $outputFile) {
+    Write-Host "Exécution de l'analyse $name..."
+    
+    # Construction du pipeline MapReduce
+    docker exec namenode hdfs dfs -cat /tweets/2024/04/tweets.json | 
+        docker exec -i namenode python3 $mapper | 
+        docker exec -i namenode sort | 
+        docker exec -i namenode python3 $reducer > $outputFile
+        
+    Write-Host "Résultats de $name disponibles dans: $outputFile"
+}
 
-# Rendre les scripts exécutables
-Write-Host "Configuration des permissions..."
-docker exec namenode chmod +x /hashtag_analyzer.py
-docker exec namenode chmod +x /sentiment_analyzer.py
-docker exec namenode chmod +x /geo_analyzer.py
+# Initialisation de l'environnement
+Setup-Environment
 
-# 1. Analyse des hashtags
-Write-Host "Exécution de l'analyse des hashtags..."
-Write-Host "Préparation des données d'entrée..."
-docker exec namenode hdfs dfs -cat /tweets/2024/04/2024_04_tweets.json | docker exec -i namenode python3 /hashtag_analyzer.py mapper | docker exec -i namenode sort | docker exec -i namenode python3 /hashtag_analyzer.py > hashtag_results.txt
+# Exécution des analyses MapReduce
+$analyses = @(
+    @{name="Hashtag"; mapper="/hashtag_mapper.py"; reducer="/hashtag_reducer.py"; output="hashtag_results.txt"},
+    @{name="Sentiment"; mapper="/geo_sentiment_mapper.py"; reducer="/geo_sentiment_reducer.py"; output="geo_sentiment_results.txt"}
+)
 
-# 2. Analyse des sentiments (nécessite textblob)
-Write-Host "Exécution de l'analyse des sentiments..."
-docker exec namenode hdfs dfs -cat /tweets/2024/04/2024_04_tweets.json | docker exec -i namenode python3 /sentiment_analyzer.py mapper | docker exec -i namenode sort | docker exec -i namenode python3 /sentiment_analyzer.py > sentiment_results.txt
+foreach ($analysis in $analyses) {
+    Run-MapReduce $analysis.name $analysis.mapper $analysis.reducer $analysis.output
+}
 
-# 3. Analyse géographique
-Write-Host "Exécution de l'analyse géographique..."
-docker exec namenode hdfs dfs -cat /tweets/2024/04/2024_04_tweets.json | docker exec -i namenode python3 /geo_analyzer.py mapper | docker exec -i namenode sort | docker exec -i namenode python3 /geo_analyzer.py > geo_results.txt
-
-Write-Host "Analyses terminées ! Résultats disponibles dans:"
-Write-Host "- hashtag_results.txt"
-Write-Host "- sentiment_results.txt"
-Write-Host "- geo_results.txt"
+Write-Host "`nAnalyses terminées ! Stockez les résultats dans HDFS avec :"
+Write-Host "  powershell -ExecutionPolicy Bypass -File scripts/store_results_in_hdfs.ps1"
