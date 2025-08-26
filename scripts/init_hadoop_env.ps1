@@ -41,7 +41,16 @@ $hdfsFiles = docker exec namenode hdfs dfs -ls /tweets/2024/04/tweets.json
 
 if (-not $hdfsFiles) {
     Write-Host "Stockage des données dans HDFS..." -ForegroundColor Yellow
-    & .\scripts\store_results_in_hdfs.ps1
+    # Créer les répertoires nécessaires
+    docker exec namenode hdfs dfs -mkdir -p /tweets/2024/04
+    
+    # Vérifier si les données locales existent
+    if (Test-Path "tweets_by_month/2024/04/tweets.json") {
+        Write-Host "Copie des tweets vers HDFS..." -ForegroundColor Yellow
+        Get-Content "tweets_by_month/2024/04/tweets.json" -Raw | docker exec -i namenode hdfs dfs -put -f - /tweets/2024/04/tweets.json
+    } else {
+        Write-Host "Fichier de tweets non trouvé. Veuillez d'abord exécuter python scripts/prepare_tweets.py" -ForegroundColor Red
+    }
 }
 
 Write-Host "Environnement initialisé avec succès!" -ForegroundColor Green
