@@ -7,37 +7,42 @@ Ce projet implémente une analyse de tweets en utilisant Hadoop et le paradigme 
 ### Fichiers principaux
 - `docker-compose.yml` : Configuration Docker pour le cluster Hadoop
 - `hadoop.env` : Variables d'environnement pour le cluster Hadoop
-- `analyze_tweets.py` : Script principal d'analyse des tweets
 - `analyze_tweets_with_sentiment.py` : Script d'analyse des tweets avec analyse de sentiment
 
 ### Dossiers
 - `data/` : Contient les données brutes des tweets
 - `scripts/` : Scripts utilitaires pour préparer et exécuter les analyses
+  - `prepare_tweets.py` : Prétraite les tweets et ajoute des informations de géolocalisation
+  - `run_analyses.ps1` : Exécute les analyses MapReduce dans l'environnement Hadoop
+  - `store_results_in_hdfs.ps1` : Stocke les résultats d'analyse dans HDFS
+  - `init_hadoop_env.ps1` : Configure l'environnement Python dans le conteneur Docker
+  - `fix_docker_env.sh` : Corrige les dépôts Debian et installe Python dans le conteneur
 - `mapreduce/` : Implémentations MapReduce pour les différentes analyses
+  - `hashtag_mapper.py` & `hashtag_reducer.py` : Analyse des hashtags populaires par mois
+  - `geo_sentiment_mapper.py` & `geo_sentiment_reducer.py` : Analyse des sentiments par région
+  - `mapreduce_hashtag_simulation.py` & `mapreduce_sentiment_simulation.py` : Simulations locales
 - `tweets_by_month/` : Organisation des tweets par année/mois
 
 ## Comment exécuter le projet
 
-1. **Démarrer le cluster Hadoop**
+1. **Démarrer le cluster Hadoop et configurer l'environnement**
    ```
    docker-compose up -d
+   powershell -ExecutionPolicy Bypass -File scripts/init_hadoop_env.ps1
    ```
 
 2. **Préparer les données pour HDFS**
    ```
    python scripts/prepare_tweets.py
+   powershell -ExecutionPolicy Bypass -File scripts/store_results_in_hdfs.ps1
    ```
 
-3. **Exécuter les analyses**
-   ```
-   python analyze_tweets_with_sentiment.py
-   ```
-   ou
+3. **Exécuter les analyses MapReduce**
    ```
    powershell -ExecutionPolicy Bypass -File scripts/run_analyses.ps1
    ```
 
-4. **Tester les analyses MapReduce**
+4. **Tester les analyses MapReduce localement (sans Hadoop)**
    ```
    python mapreduce/mapreduce_hashtag_simulation.py
    python mapreduce/mapreduce_sentiment_simulation.py
