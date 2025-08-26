@@ -1,20 +1,24 @@
 # Script PowerShell pour exécuter les analyses MapReduce dans Hadoop
 
 function Setup-Environment {
-    # Installation des dépendances
-    Write-Host "Installation des dépendances..."
-    docker exec namenode apt-get update -qq
-    docker exec namenode apt-get install -y python3 python3-pip -qq
-    docker exec namenode pip3 install textblob -q
-    docker exec namenode python3 -m textblob.download_corpora lite
+    # Vérifier si l'environnement est déjà configuré
+    $pythonCheck = docker exec namenode which python3 2>$null
+    
+    if (-not $pythonCheck) {
+        Write-Host "L'environnement Python n'est pas configuré. Exécutez d'abord .\scripts\init_hadoop_env.ps1" -ForegroundColor Red
+        exit 1
+    }
+    
+    # Définir le répertoire du projet
+    $projectDir = $PWD.Path
     
     # Copie des scripts MapReduce
     Write-Host "Configuration des scripts d'analyse..."
     $scripts = @(
-        "mapreduce/hashtag_mapper.py:/hashtag_mapper.py",
-        "mapreduce/hashtag_reducer.py:/hashtag_reducer.py", 
-        "mapreduce/geo_sentiment_mapper.py:/geo_sentiment_mapper.py",
-        "mapreduce/geo_sentiment_reducer.py:/geo_sentiment_reducer.py"
+        "$projectDir\mapreduce\hashtag_mapper.py:/hashtag_mapper.py",
+        "$projectDir\mapreduce\hashtag_reducer.py:/hashtag_reducer.py", 
+        "$projectDir\mapreduce\geo_sentiment_mapper.py:/geo_sentiment_mapper.py",
+        "$projectDir\mapreduce\geo_sentiment_reducer.py:/geo_sentiment_reducer.py"
     )
     
     foreach ($script in $scripts) {

@@ -11,7 +11,7 @@ def output_city_sentiment(city, sentiment_sum, sentiment_count):
     elif average_sentiment < -0.1:
         sentiment_label = "négatif"
     
-    print(f"{city}\t{average_sentiment:.4f}\t{sentiment_label}\t{sentiment_count}")
+    print("{0}\t{1:.4f}\t{2}\t{3}".format(city, average_sentiment, sentiment_label, sentiment_count))
 
 def process_cities():
     current_city = None
@@ -33,7 +33,7 @@ def process_cities():
             sentiment_count += 1
                 
         except Exception as e:
-            sys.stderr.write(f"Error reducing line: {e}\n")
+            sys.stderr.write("Error reducing line: {0}\n".format(e))
     
     if current_city is not None:
         output_city_sentiment(current_city, sentiment_sum, sentiment_count)

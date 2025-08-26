@@ -14,7 +14,7 @@ def process_tweet(line):
         return
         
     date = datetime.datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
-    month_key = f"{date.year}-{date.month:02d}"
+    month_key = "{0}-{1:02d}".format(date.year, date.month)
     
     for hashtag in tweet.get("hashtags", []):
         hashtag = hashtag.lower().strip()
@@ -22,7 +22,7 @@ def process_tweet(line):
             hashtag = hashtag[1:]
             
         if hashtag:
-            print(f"{month_key}\t{hashtag}\t1")
+            print("{0}\t{1}\t1".format(month_key, hashtag))
 
 if __name__ == "__main__":
     for line in sys.stdin:
@@ -31,4 +31,4 @@ if __name__ == "__main__":
         try:
             process_tweet(line)
         except Exception as e:
-            sys.stderr.write(f"Error: {str(e)}\n")
+            sys.stderr.write("Error: {0}\n".format(str(e)))

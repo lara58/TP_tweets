@@ -25,7 +25,7 @@ def process_tweet(line):
     except:
         pass
     
-    print(f"{city}\t{sentiment}")
+    print("{0}\t{1}".format(city, sentiment))
 
 if __name__ == "__main__":
     for line in sys.stdin:
@@ -34,4 +34,4 @@ if __name__ == "__main__":
         try:
             process_tweet(line)
         except Exception as e:
-            sys.stderr.write(f"Error: {str(e)}\n")
+            sys.stderr.write("Error: {0}\n".format(str(e)))
